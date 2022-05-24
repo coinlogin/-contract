@@ -219,7 +219,7 @@ interface IDEXRouter {
 }
 
 interface IDividendDistributor {
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution,uint256 _minimumTokenBalanceForDividends) external;
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external;
     function setShare(address shareholder, uint256 amount) external;
     function deposit() external payable;
     function process(uint256 gas) external;
@@ -253,9 +253,8 @@ contract DividendDistributor is IDividendDistributor {
     uint256 public dividendsPerShareAccuracyFactor = 10 ** 36;
 
     //SETMEUP, change this to 1 hour instead of 10mins
-    uint256 public minPeriod = 1 hours;// min 1 hour delay
-    uint256 public minDistribution = 1 * (10 ** 18);// 0.01 BUSD minimum auto send
-	uint256 public minimumTokenBalanceForDividends = 98000 * (10**9); // user must hold 98,000 token
+    uint256 public minPeriod = 45 minutes;
+    uint256 public minDistribution = 1 * (10 ** 18);
 
     uint256 currentIndex;
 
@@ -277,10 +276,9 @@ contract DividendDistributor is IDividendDistributor {
         _token = msg.sender;
     }
 
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution,uint256 _minimumTokenBalanceForDividends) external override onlyToken {
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external override onlyToken {
         minPeriod = _minPeriod;
         minDistribution = _minDistribution;
-		minimumTokenBalanceForDividends = _minimumTokenBalanceForDividends;
     }
 
     function setShare(address shareholder, uint256 amount) external override onlyToken {
@@ -288,9 +286,9 @@ contract DividendDistributor is IDividendDistributor {
             distributeDividend(shareholder);
         }
 
-        if(amount > minimumTokenBalanceForDividends && shares[shareholder].amount == 0){
+        if(amount > 0 && shares[shareholder].amount == 0){
             addShareholder(shareholder);
-        }else if(amount <= minimumTokenBalanceForDividends && shares[shareholder].amount > 0){
+        }else if(amount == 0 && shares[shareholder].amount > 0){
             removeShareholder(shareholder);
         }
 
@@ -405,20 +403,22 @@ contract CoinLogin is IBEP20, Auth {
 	 * WBNB Contract: 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
      * BSC testnet: 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
      */
-	
+	/*
 	address REWARDS = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address DEAD = 0x000000000000000000000000000000000000dEaD;
     address ZERO = 0x0000000000000000000000000000000000000000;
-    address _marketingAdr = 0x77833b97cc64aA0846E88a0324E7F702356AE5C1;
+    address _marketingAdr = 0x18aF257Ef4ff7b3b9c5661d89B2a72e60ea172b6;
 	address routerv2 = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
     string constant _name = "Coin Login";
     string constant _symbol = "CLG";
     uint8 constant _decimals = 9;
 
-    uint256 _totalSupply = 98 * 10**6 * (10 ** _decimals);
+    uint256 _totalSupply = 38 * 10**6 * (10 ** _decimals);
     uint256 public _maxTxAmount = _totalSupply * 1 / 100;
+    //max wallet holding of 3% 
+    uint256 public _maxWalletToken = ( _totalSupply * 20 ) / 100;
 
     mapping (address => uint256) _balances;
     mapping (address => mapping (address => uint256)) _allowances;
@@ -518,12 +518,24 @@ contract CoinLogin is IBEP20, Auth {
         return _transferFrom(sender, recipient, amount);
     }
 
+    //settting the maximum permitted wallet holding (percent of total supply)
+     function setMaxWalletPercent(uint256 maxWallPercent) external onlyOwner() {
+        _maxWalletToken = (_totalSupply * maxWallPercent ) / 100;
+    }
+
     function _transferFrom(address sender, address recipient, uint256 amount) internal returns (bool) {
         if(inSwap){ return _basicTransfer(sender, recipient, amount); }
 
         if(!authorizations[sender] && !authorizations[recipient]){
             require(tradingOpen,"Trading not open yet!");
         }
+
+        // max wallet code
+        //if (!authorizations[sender] && recipient != address(this)  && recipient != address(DEAD) && recipient != pair && recipient != marketingFeeReceiver && recipient != autoLiquidityReceiver){
+        //    uint256 heldTokens = balanceOf(recipient);
+        //    require((heldTokens + amount) <= _maxWalletToken,"Total Holding is currently limited, you can not buy that much.");}
+        
+
         
         // cooldown timer, so a bot doesnt do quick trades! 1min gap between 2 trades.
         if (sender == pair &&
@@ -597,9 +609,6 @@ contract CoinLogin is IBEP20, Auth {
         payable(marketingFeeReceiver).transfer(amountBNB * amountPercentage / 100);
     }
 
-
-
-
     // enable cooldown between trades
     function cooldownEnabled(bool _status, uint8 _interval) public onlyOwner {
         buyCooldownEnabled = _status;
@@ -655,7 +664,6 @@ contract CoinLogin is IBEP20, Auth {
         }
     }
 
-
     function setTxLimit(uint256 amount) external authorized {
         _maxTxAmount = amount;
     }
@@ -709,15 +717,15 @@ contract CoinLogin is IBEP20, Auth {
         targetLiquidityDenominator = _denominator;
     }
 
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution,uint256 _minimumTokenBalanceForDividends) external authorized {
-        distributor.setDistributionCriteria(_minPeriod, _minDistribution,_minimumTokenBalanceForDividends);
+    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external authorized {
+        distributor.setDistributionCriteria(_minPeriod, _minDistribution);
     }
 
     function setDistributorSettings(uint256 gas) external authorized {
         require(gas < 750000);
         distributorGas = gas;
     }
-    
+
     function getCirculatingSupply() public view returns (uint256) {
         return _totalSupply.sub(balanceOf(DEAD)).sub(balanceOf(ZERO));
     }
