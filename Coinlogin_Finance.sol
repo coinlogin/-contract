@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: Unlicensed
 
-pragma solidity ^0.8.12;
+pragma solidity ^0.8.14;
 
 library SafeMath {
     
@@ -403,22 +403,19 @@ contract CoinLogin is IBEP20, Auth {
 	 * WBNB Contract: 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c
      * BSC testnet: 0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3
      */
-	/*
 	address REWARDS = 0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56;
     address WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
     address DEAD = 0x000000000000000000000000000000000000dEaD;
     address ZERO = 0x0000000000000000000000000000000000000000;
-    address _marketingAdr = 0x18aF257Ef4ff7b3b9c5661d89B2a72e60ea172b6;
+    address _marketingAdr = 0x77833b97cc64aA0846E88a0324E7F702356AE5C1;
 	address routerv2 = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
     string constant _name = "Coin Login";
     string constant _symbol = "CLG";
     uint8 constant _decimals = 9;
 
-    uint256 _totalSupply = 38 * 10**6 * (10 ** _decimals);
+    uint256 _totalSupply = 98 * 10**6 * (10 ** _decimals);
     uint256 public _maxTxAmount = _totalSupply * 1 / 100;
-    //max wallet holding of 3% 
-    uint256 public _maxWalletToken = ( _totalSupply * 20 ) / 100;
 
     mapping (address => uint256) _balances;
     mapping (address => mapping (address => uint256)) _allowances;
@@ -502,10 +499,6 @@ contract CoinLogin is IBEP20, Auth {
         return true;
     }
 
-    function approveMax(address spender) external returns (bool) {
-        return approve(spender, _totalSupply);
-    }
-
     function transfer(address recipient, uint256 amount) external override returns (bool) {
         return _transferFrom(msg.sender, recipient, amount);
     }
@@ -518,11 +511,6 @@ contract CoinLogin is IBEP20, Auth {
         return _transferFrom(sender, recipient, amount);
     }
 
-    //settting the maximum permitted wallet holding (percent of total supply)
-     function setMaxWalletPercent(uint256 maxWallPercent) external onlyOwner() {
-        _maxWalletToken = (_totalSupply * maxWallPercent ) / 100;
-    }
-
     function _transferFrom(address sender, address recipient, uint256 amount) internal returns (bool) {
         if(inSwap){ return _basicTransfer(sender, recipient, amount); }
 
@@ -530,13 +518,6 @@ contract CoinLogin is IBEP20, Auth {
             require(tradingOpen,"Trading not open yet!");
         }
 
-        // max wallet code
-        //if (!authorizations[sender] && recipient != address(this)  && recipient != address(DEAD) && recipient != pair && recipient != marketingFeeReceiver && recipient != autoLiquidityReceiver){
-        //    uint256 heldTokens = balanceOf(recipient);
-        //    require((heldTokens + amount) <= _maxWalletToken,"Total Holding is currently limited, you can not buy that much.");}
-        
-
-        
         // cooldown timer, so a bot doesnt do quick trades! 1min gap between 2 trades.
         if (sender == pair &&
             buyCooldownEnabled &&
@@ -604,17 +585,6 @@ contract CoinLogin is IBEP20, Auth {
         && _balances[address(this)] >= swapThreshold;
     }
 
-    function clearStuckBalance(uint256 amountPercentage) external onlyOwner {
-        uint256 amountBNB = address(this).balance;
-        payable(marketingFeeReceiver).transfer(amountBNB * amountPercentage / 100);
-    }
-
-    // enable cooldown between trades
-    function cooldownEnabled(bool _status, uint8 _interval) public onlyOwner {
-        buyCooldownEnabled = _status;
-        cooldownTimerInterval = _interval;
-    }
-
 
 
     function swapBack() internal swapping {
@@ -663,69 +633,6 @@ contract CoinLogin is IBEP20, Auth {
             emit AutoLiquify(amountBNBLiquidity, amountToLiquify);
         }
     }
-
-    function setTxLimit(uint256 amount) external authorized {
-        _maxTxAmount = amount;
-    }
-
-    function setIsDividendExempt(address holder, bool exempt) external authorized {
-        require(holder != address(this) && holder != pair);
-        isDividendExempt[holder] = exempt;
-        if(exempt){
-            distributor.setShare(holder, 0);
-        }else{
-            distributor.setShare(holder, _balances[holder]);
-        }
-    }
-
-    function setIsFeeExempt(address holder, bool exempt) external authorized {
-        isFeeExempt[holder] = exempt;
-    }
-
-    function setIsTxLimitExempt(address holder, bool exempt) external authorized {
-        isTxLimitExempt[holder] = exempt;
-    }
-
-    function setIsTimelockExempt(address holder, bool exempt) external authorized {
-        isTimelockExempt[holder] = exempt;
-    }
-
-    function setFees(uint256 _liquidityFee, uint256 _reflectionFee, uint256 _marketingFee, uint256 _feeDenominator) external authorized {
-        liquidityFee = _liquidityFee;
-        reflectionFee = _reflectionFee;
-        marketingFee = _marketingFee;
-        totalFee = _liquidityFee.add(_reflectionFee).add(_marketingFee);
-        feeDenominator = _feeDenominator;
-        require(totalFee < feeDenominator/9);
-    }
-
-    function setFeeReceivers(address _autoLiquidityReceiver, address _marketingFeeReceiver) external authorized {
-        autoLiquidityReceiver = _autoLiquidityReceiver;
-        marketingFeeReceiver = _marketingFeeReceiver;
-    }
-
-    function setSwapBackSettings(bool _enabled, uint256 _amount) external authorized {
-        swapEnabled = _enabled;
-        
-        
-        
-        swapThreshold = _amount;
-    }
-
-    function setTargetLiquidity(uint256 _target, uint256 _denominator) external authorized {
-        targetLiquidity = _target;
-        targetLiquidityDenominator = _denominator;
-    }
-
-    function setDistributionCriteria(uint256 _minPeriod, uint256 _minDistribution) external authorized {
-        distributor.setDistributionCriteria(_minPeriod, _minDistribution);
-    }
-
-    function setDistributorSettings(uint256 gas) external authorized {
-        require(gas < 750000);
-        distributorGas = gas;
-    }
-
     function getCirculatingSupply() public view returns (uint256) {
         return _totalSupply.sub(balanceOf(DEAD)).sub(balanceOf(ZERO));
     }
